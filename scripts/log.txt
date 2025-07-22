@@ -3821,3 +3821,45 @@ pymongo.errors.ServerSelectionTimeoutError: SSL handshake failed: ac-yljzo2y-sha
 2025-07-22 17:30:10,578 [INFO] Finished processing all stations
 2025-07-22 17:30:10,580 [INFO] Script completed successfully
 2025-07-22 17:30:10,580 [INFO] Closing MongoDB connection
+2025-07-22 18:00:02,400 [INFO] Connected to MongoDB
+2025-07-22 18:00:02,677 [INFO] Unique index on 'id' created
+2025-07-22 18:00:02,679 [INFO] Starting fetch_and_store script
+2025-07-22 18:00:02,679 [INFO] Processing station: comedyclassics
+2025-07-22 18:00:02,914 [INFO] [Comedy Classics] Tracks received: 24
+2025-07-22 18:00:03,516 [INFO] [Comedy Classics] Tracks added: 7
+2025-07-22 18:00:03,520 [INFO] [Comedy Classics] Time Span: 95m 50s
+2025-07-22 18:00:03,520 [INFO] Processing station: siriusxmcomedyclub
+2025-07-22 18:00:03,722 [INFO] [SiriusXM Comedy Club] Tracks received: 24
+2025-07-22 18:00:04,486 [INFO] [SiriusXM Comedy Club] Tracks added: 10
+2025-07-22 18:00:04,490 [INFO] [SiriusXM Comedy Club] Time Span: 79m 28s
+2025-07-22 18:00:04,490 [INFO] Processing station: rawcomedy
+2025-07-22 18:00:04,675 [INFO] [Raw Comedy] Tracks received: 24
+2025-07-22 18:00:05,063 [INFO] [Raw Comedy] Tracks added: 6
+2025-07-22 18:00:05,067 [INFO] [Raw Comedy] Time Span: 120m 31s
+2025-07-22 18:00:05,068 [INFO] Processing station: purecomedy
+2025-07-22 18:00:05,245 [INFO] [Pure Comedy] Tracks received: 24
+2025-07-22 18:00:05,889 [INFO] [Pure Comedy] Tracks added: 8
+2025-07-22 18:00:05,894 [INFO] [Pure Comedy] Time Span: 88m 23s
+2025-07-22 18:00:05,894 [INFO] Processing station: comedyroundup
+2025-07-22 18:00:06,090 [INFO] [Comedy Roundup] Tracks received: 24
+2025-07-22 18:00:06,855 [INFO] [Comedy Roundup] Tracks added: 9
+2025-07-22 18:00:06,862 [INFO] [Comedy Roundup] Time Span: 75m 0s
+2025-07-22 18:00:06,862 [INFO] Processing station: kevinhartslolradio
+2025-07-22 18:00:07,051 [INFO] [Kevin Hart's LOL Radio] Tracks received: 24
+2025-07-22 18:00:07,818 [INFO] [Kevin Hart's LOL Radio] Tracks added: 5
+2025-07-22 18:00:07,821 [INFO] [Kevin Hart's LOL Radio] Time Span: 95m 12s
+2025-07-22 18:00:07,822 [INFO] Processing station: comedycentralradio
+2025-07-22 18:00:08,010 [INFO] [Comedy Central Radio] Tracks received: 24
+2025-07-22 18:00:08,775 [INFO] [Comedy Central Radio] Tracks added: 6
+2025-07-22 18:00:08,779 [INFO] [Comedy Central Radio] Time Span: 108m 36s
+2025-07-22 18:00:08,779 [INFO] Processing station: comedygreats
+2025-07-22 18:00:08,953 [INFO] [Comedy Greats] Tracks received: 24
+2025-07-22 18:00:09,751 [INFO] [Comedy Greats] Tracks added: 6
+2025-07-22 18:00:09,755 [INFO] [Comedy Greats] Time Span: 116m 49s
+2025-07-22 18:00:09,756 [INFO] Processing station: netflixisajokeradio
+2025-07-22 18:00:09,954 [INFO] [Netflix Is A Joke Radio] Tracks received: 24
+2025-07-22 18:00:10,746 [INFO] [Netflix Is A Joke Radio] Tracks added: 9
+2025-07-22 18:00:10,750 [INFO] [Netflix Is A Joke Radio] Time Span: 98m 22s
+2025-07-22 18:00:10,751 [INFO] Finished processing all stations
+2025-07-22 18:00:10,753 [INFO] Script completed successfully
+2025-07-22 18:00:10,754 [INFO] Closing MongoDB connection
