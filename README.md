@@ -18,7 +18,7 @@ Track comedy artist spins from SiriusXM, estimate royalties, and view detailed r
 ## 🛠 Tech Stack
 
 - **Backend**: Python, FastAPI
-- **Frontend**: React, TailwindCSS
+- **Frontend**: React, TypeScript, TailwindCSS
 - **Database**: MongoDB Atlas
 - **Auth**: Google OAuth (ID token verification)
 - **Infra**: EC2 + Nginx reverse proxy
