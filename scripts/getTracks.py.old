@@ -1,0 +1,62 @@
+from pymongo import MongoClient
+import requests
+from stations import STATION_NAMES
+from datetime import datetime
+from dateutil import parser
+
+# MongoDB setup
+MONGO_URI = "mongodb+srv://setup:u2eIkhlwU0k5rya8@cluster0.jsdumcm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+client = MongoClient(MONGO_URI)
+db = client["sirius"]
+collection = db["comedy_tracks"]
+
+# Ensure the 'id' field from the API is unique
+collection.create_index("id", unique=True)
+
+BASE_URL = "https://xmplaylist.com/api/station/"
+
+def fetch_and_store():
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+    }
+
+    for station in STATION_NAMES:
+        url = f"{BASE_URL}{station}"
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+
+            channel_name = data.get("channel", {}).get("name", "")
+            results = data.get("results", [])
+
+            for item in results:
+                track_info = {
+                    "id": item["id"],
+                    "timestamp": item["timestamp"],
+                    "title": ' '.join(word.capitalize() for word in item["track"]["title"].split()),
+                    "title": item["track"]["title"],
+                    "artist": item["track"]["artists"][0] if item["track"]["artists"] else None,
+                    "channel": channel_name
+                }
+                collection.update_one(
+                    {"id": track_info["id"]}, 
+                    {"$setOnInsert": track_info}, 
+                    upsert=True
+                )
+
+            # Time span logging
+            timestamps = [parser.parse(item["timestamp"]) for item in results]
+            if timestamps:
+                time_span = max(timestamps) - min(timestamps)
+                total_seconds = int(time_span.total_seconds())
+                minutes, seconds = divmod(total_seconds, 60)
+                print(f"[{channel_name}] Time Span: {minutes} minutes, {seconds} seconds")
+
+        except Exception as e:
+            print(f"Error fetching from {url}: {e}")
+
+if __name__ == "__main__":
+    fetch_and_store()
+

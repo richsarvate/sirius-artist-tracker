@@ -1,0 +1,322 @@
+from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Query, Request, HTTPException, status
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pymongo import MongoClient
+from datetime import datetime, timedelta
+from typing import List, Optional
+import json
+from fastapi.middleware.cors import CORSMiddleware
+from authlib.integrations.starlette_client import OAuth
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import RedirectResponse
+from dotenv import load_dotenv
+from zoneinfo import ZoneInfo
+import os
+
+app = FastAPI()
+load_dotenv()
+
+class CustomStaticFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        return response
+
+app.mount("/static", StaticFiles(directory="/home/ec2-user/SiriusMonitoring/api/static"), name="static")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://siriusxm.setupcomedy.com"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"), same_site="lax", https_only=False)
+#app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"), same_site="none", https_only=True)
+
+oauth = OAuth()
+oauth.register(
+    name='google',
+    client_id=os.getenv("GOOGLE_CLIENT_ID"),
+    client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid email profile'}
+)
+
+# MongoDB connection
+MONGO_URI = os.getenv("MONGO_URI")
+client = MongoClient(MONGO_URI)
+db = client["sirius"]
+collection = db["comedy_tracks"]
+
+# Load tracked artists and tracks
+with open("tracked_artists.json") as f:
+    TRACKED_ARTISTS_DATA = json.load(f)
+
+# Extract artists and tracks for MongoDB query
+ARTISTS = [item["artist"] for item in TRACKED_ARTISTS_DATA]
+TRACKS = []
+for item in TRACKED_ARTISTS_DATA:
+    TRACKS.extend(item["tracks"])
+
+@app.get("/auth/login")
+async def login(request: Request):
+    user_agent = request.headers.get('user-agent', '')
+    print(f"Login User-Agent: {user_agent}")
+    if 'FBAN' in user_agent or 'FB_IAB' in user_agent or 'Messenger' in user_agent:
+        print("Detected Facebook in-app browser, showing custom error")
+        return HTMLResponse(
+            content="""
+            <html>
+                <head>
+                    <title>Access Blocked</title>
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+                        h1 { color: #d32f2f; }
+                        p { font-size: 16px; }
+                        a { color: #1976d2; text-decoration: none; font-weight: bold; }
+                        a:hover { text-decoration: underline; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Access Blocked by Google</h1>
+                    <p>Please open <a href="https://siriusxm.setupcomedy.com">siriusxm.setupcomedy.com</a> in Chrome, Safari, or another standard browser on your device.</p>
+                    <p>If you're using an app like Facebook Messenger, copy the link and paste it into your browser.</p>
+                </body>
+            </html>
+            """,
+            status_code=403
+        )
+    redirect_uri = "https://siriusxm.setupcomedy.com/auth/google/callback"
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+@app.get("/auth/google/callback")
+async def callback(request: Request):
+    try:
+        print(f"Callback request: session={request.session}")
+        stored_state = request.session.get('oauth_state')
+        incoming_state = request.query_params.get('state')
+        print(f"State check: stored={stored_state}, incoming={incoming_state}")
+        if not stored_state or stored_state != incoming_state:
+            print("CSRF mismatch detected")
+            request.session.pop('oauth_state', None)  # Clear invalid state
+            return HTMLResponse(
+                content="""
+                <html>
+                    <head><title>Authentication Error</title></head>
+                    <body>
+                        <h1>Authentication Error</h1>
+                        <p>CSRF mismatch. Please try logging in again.</p>
+                        <a href="/auth/login">Login</a>
+                    </body>
+                </html>
+                """,
+                status_code=403
+            )
+        token = await oauth.google.authorize_access_token(request)
+        user = token.get('userinfo')
+        if user:
+            print(f"User authenticated: {user}")
+            request.session['user'] = dict(user)
+            request.session.pop('oauth_state', None)  # Clean up state after success
+            return RedirectResponse(url="/", status_code=302)
+        print("No user info returned from Google")
+        return HTMLResponse(
+            content="""
+            <html>
+                <head><title>Authentication Error</title></head>
+                <body>
+                    <h1>Authentication Error</h1>
+                    <p>No user info returned from Google. Please try logging in again.</p>
+                    <a href="/auth/login">Login</a>
+                    </body>
+            </html>
+            """,
+            status_code=401
+        )
+    except Exception as e:
+        print(f"Auth error: {str(e)}")
+        request.session.pop('oauth_state', None)
+        if "disallowed_useragent" in str(e).lower():
+            return HTMLResponse(
+                content="""
+                <html>
+                    <head>
+                        <title>Access Blocked</title>
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <style>
+                            body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+                            h1 { color: #d32f2f; }
+                            p { font-size: 16px; }
+                            a { color: #1976d2; text-decoration: none; font-weight: bold; }
+                            a:hover { text-decoration: underline; }
+                        </style>
+                    </head>
+                    <body>
+                        <h1>Access Blocked by Google</h1>
+                        <p>Please open <a href="https://siriusxm.setupcomedy.com">siriusxm.setupcomedy.com</a> in Chrome, Safari, or another standard browser on your device.</p>
+                        <p>If you're using an app like Facebook, copy the link and paste it into your browser.</p>
+                    </body>
+                </html>
+                """,
+                status_code=403
+            )
+
+        return HTMLResponse(
+            content=f"""
+            <html>
+                <head><title>Authentication Error</title></head>
+                <body>
+                    <h1>Authentication Error</h1>
+                    <p>An error occurred during authentication: {str(e)}.</p>
+                    <p>Please try logging in again.</p>
+                    <a href="/auth/login">Login</a>
+                </body>
+            </html>
+            """,
+            status_code=401
+        )
+    
+@app.get("/auth/logout")
+async def logout(request: Request):
+    request.session.pop('user', None)
+    return RedirectResponse(url="/auth/login", status_code=302)
+
+@app.get("/", response_class=FileResponse)
+async def read_root(request: Request):
+    user = request.session.get('user')
+    if not user:
+        return HTMLResponse(
+            content="""
+            <html>
+                <head><title>Login Required</title></head>
+                <body>
+                    <h1>Login Required</h1>
+                    <p>Please log in to access the SiriusXM Artist Plays Report.</p>
+                    <a href="/auth/login">Log in with Google</a>
+                </body>
+            </html>
+            """,
+            status_code=401
+        )
+    allowed_email = "info@setupcomedy.com"
+    if user.get('email') != allowed_email:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Only info@setupcomedy.com can access this site"
+        )
+    return FileResponse("/home/ec2-user/SiriusMonitoring/api/static/index.html")
+
+#@app.get("/", response_class=FileResponse)
+#async def read_root(request: Request):
+#    user = request.session.get('user')
+#    print(f"Root request: user={user}, session={request.session}")
+#    if not user:
+#        return RedirectResponse(url="/auth/login", status_code=302)
+#    allowed_email = "info@setupcomedy.com"
+#    if user.get('email') != allowed_email:
+#        raise HTTPException(
+#            status_code=status.HTTP_403_FORBIDDEN,
+#            detail="Access denied: Only info@setupcomedy.com can access this site"
+#        )
+#    return FileResponse("/home/ec2-user/SiriusMonitoring/api/static/index.html")
+
+@app.get("/api/artist-plays")
+async def artist_plays(request: Request, start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
+    user = request.session.get('user')
+    print(f"Artist-plays request: user={user}, session={request.session}")
+    if not user:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    allowed_email = "info@setupcomedy.com"
+    if user.get('email') != allowed_email:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Only info@setupcomedy.com can access this site"
+        )
+    def clean_iso(date_str: Optional[str]) -> Optional[datetime]:
+        if date_str:
+            return datetime.fromisoformat(date_str.rstrip("Z"))
+        return None
+
+    try:
+        start_dt = clean_iso(start) or datetime(2020, 1, 1)
+        end_dt = clean_iso(end) or datetime.utcnow()
+        print(f"Querying for artists: {ARTISTS}, tracks: {TRACKS}, start: {start_dt}, end: {end_dt}")
+
+        pipeline = [
+            {
+                "$match": {
+                    "artist": {"$in": ARTISTS},
+                    "title": {"$in": TRACKS},
+                    "timestamp": {"$gte": start_dt.isoformat() + "Z", "$lte": end_dt.isoformat() + "Z"}
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$artist",
+                    "tracks": {
+                        "$push": {
+                            "title": "$title",
+                            "channel": "$channel"
+                        }
+                    },
+                    "count": {"$sum": 1}
+                }
+            },
+            {
+                "$sort": {"count": -1}
+            },
+            {
+                "$project": {
+                    "artist": "$_id",
+                    "tracks": {
+                        "$sortArray": {
+                            "input": "$tracks",
+                            "sortBy": {"title": 1}
+                        }
+                    },
+                    "count": 1,
+                    "_id": 0
+                }
+            }
+        ]
+
+        results = list(collection.aggregate(pipeline, collation={"locale": "en", "strength": 2}))
+        print(f"Query results: {results}")
+        return {"data": results}
+
+    except ValueError as e:
+        print(f"ValueError: {str(e)}")
+        return {"error": f"Invalid date format: {str(e)}"}
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return {"error": f"An error occurred: {str(e)}"}
+
+@app.get("/date-range/{period}")
+async def get_date_range(period: str, request: Request):
+    user = request.session.get('user')
+    print(f"Date-range request: user={user}, session={request.session}")
+    if not user:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    allowed_email = "info@setupcomedy.com"
+    if user.get('email') != allowed_email:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Only info@setupcomedy.com can access this site"
+        )
+    now = datetime.now(ZoneInfo("America/Toronto"))  # Montreal timezone (EDT, UTC-4)
+    if period == "today":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period == "week":
+        start = now - timedelta(days=now.weekday())  # Monday
+    elif period == "month":
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif period == "year":
+        start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:  # 'all' or default
+        start = datetime(2020, 1, 1, tzinfo=ZoneInfo("America/Toronto"))
+    start = start - timedelta(hours=4)
+    return {"start": start.isoformat(), "end": now.isoformat()}

@@ -1,0 +1,67 @@
+import csv
+from pymongo import MongoClient
+from datetime import datetime
+import re
+
+# MongoDB connection string
+MONGO_URI = "mongodb+srv://setup:u2eIkhlwU0k5rya8@cluster0.jsdumcm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+
+# Database and collection names
+db_name = "sirius"
+collection_name = "comedy_tracks"
+
+# CSV file path
+csv_file = '/home/ec2-user/SiriusMonitoring/dataPopulator/report.csv'  # Replace with your actual CSV file path
+
+# Connect to MongoDB
+client = MongoClient(MONGO_URI)
+db = client[db_name]
+collection = db[collection_name]
+
+# Collect conditions for duplicates
+conditions = []
+
+# Read the CSV and build the query conditions
+with open(csv_file, mode='r', encoding='utf-8') as file:
+    reader = csv.DictReader(file)
+    for row in reader:
+        # Parse the timestamp to ISO format (without ms)
+        ts = datetime.strptime(row['datetime'], '%Y-%m-%d %H:%M:%S')
+        base_ts = ts.isoformat()
+
+        # Create condition for this row
+        condition = {
+            "artist": row['Artist'],
+            "timestamp": {
+                "$regex": f"^{re.escape(base_ts)}(\\.\\d{{1,6}})?Z$"
+            }
+        }
+        conditions.append(condition)
+
+# Perform a single query to find all matching documents
+if conditions:
+    # Use $or to check all conditions in one query
+    matching_docs = collection.find({"$or": conditions})
+    
+    # Collect unique artist+timestamp combinations from matching docs
+    found_keys = set()
+    for doc in matching_docs:
+        key = (doc["artist"], doc["timestamp"])
+        found_keys.add(key)
+
+    # Count duplicates by checking which CSV rows match found keys
+    duplicate_count = 0
+    with open(csv_file, mode='r', encoding='utf-8') as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            ts = datetime.strptime(row['datetime'], '%Y-%m-%d %H:%M:%S')
+            base_ts = ts.isoformat()
+            # Check if this artist+timestamp (with optional ms) exists in found_keys
+            for artist, found_ts in found_keys:
+                if row['Artist'] == artist and re.match(f"^{re.escape(base_ts)}(\\.\\d{{1,6}})?Z$", found_ts):
+                    duplicate_count += 1
+                    break
+
+    print(f"Found {duplicate_count} duplicate records in the collection.")
+else:
+    print("No records to check in the CSV.")
