@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext", // Keep ESNext for module support
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "jsx": "react-jsx", // Ensures JSX is handled by React
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["react", "react-dom"] // Add types to resolve jsx-runtime
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}
