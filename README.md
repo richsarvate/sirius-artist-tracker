@@ -6,12 +6,12 @@ Track comedy artist spins from SiriusXM, estimate royalties, and view detailed r
 
 ## 🚀 Features
 
-- 🔁 Scrapes track play data from [xmplaylist.com](https://xmplaylist.com)
+- 🔁 Scrapes track play data 
 - 💾 Stores unique plays in MongoDB
 - 🧠 Filters by tracked artists from a Google Sheet
 - 📊 Displays artist and track breakdown in a React + Tailwind dashboard
 - 🔐 Google Sign-In (restricted to allowed emails)
-- 💵 Estimates royalties ($20 per play by default)
+- 💵 Estimates royalties 
 
 ---
 
