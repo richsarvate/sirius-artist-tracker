@@ -16,10 +16,11 @@ declare global {
 const App: React.FC = () => {
   const [data, setData] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<string>('all');
+  const [period, setPeriod] = useState<string>('month');
   const [loading, setLoading] = useState<boolean>(false);
   const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
   const [expandedArtist, setExpandedArtist] = useState<string | null>(null);
+  const [expandedTrack, setExpandedTrack] = useState<{ artist: string; title: string } | null>(null);
 
   const getDateRange = (period: string) => {
     console.log('getDateRange period:', period);
@@ -86,9 +87,15 @@ const App: React.FC = () => {
         setData([]);
       } else {
         const enrichedData = result.data.map((artist: any) => {
-          const trackBreakdown: Record<string, number> = {};
+          const trackBreakdown: Record<string, { count: number; channels: string[] }> = {};
           artist.tracks.forEach((track: any) => {
-            trackBreakdown[track.title] = (trackBreakdown[track.title] || 0) + 1;
+            if (!trackBreakdown[track.title]) {
+              trackBreakdown[track.title] = { count: 0, channels: [] };
+            }
+            trackBreakdown[track.title].count += track.plays ?? 1;
+            if (track.channel && !trackBreakdown[track.title].channels.includes(track.channel)) {
+              trackBreakdown[track.title].channels.push(track.channel);
+            }
           });
           return { ...artist, trackBreakdown };
         });
@@ -107,35 +114,57 @@ const App: React.FC = () => {
     }
   }, [period, isAuthorized]);
 
+  // Replace your Google sign-in useEffect with this:
   useEffect(() => {
-    if (!isAuthorized && window.google?.accounts?.id) {
-      const buttonContainer = document.getElementById("gsi-button");
-      if (buttonContainer) {
-        buttonContainer.innerHTML = "";
-        window.google.accounts.id.renderButton(buttonContainer, {
-          theme: "outline",
-          size: "large",
-          width: 300,
-        });
-      }
-      window.google.accounts.id.initialize({
-        client_id: "182239299318-an3tmsdprif9pf0bg77ulmfgofkg435h.apps.googleusercontent.com",
-        callback: (response: any) => {
-          fetch("/api/verify-google-token", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ credential: response.credential }),
-          })
-            .then((res) => res.json())
-            .then((data) => {
-              if (data.allowed) {
-                setIsAuthorized(true);
-              } else {
-                alert("Access denied.");
-              }
+    // Only run if not authorized
+    if (!isAuthorized) {
+      // Helper to render the Google button if the script is loaded
+      const renderGoogleButton = () => {
+        if (window.google?.accounts?.id) {
+          const buttonContainer = document.getElementById("gsi-button");
+          if (buttonContainer) {
+            buttonContainer.innerHTML = "";
+            window.google.accounts.id.renderButton(buttonContainer, {
+              theme: "outline",
+              size: "large",
+              width: 300,
             });
-        },
-      });
+          }
+          window.google.accounts.id.initialize({
+            client_id: "182239299318-an3tmsdprif9pf0bg77ulmfgofkg435h.apps.googleusercontent.com",
+            callback: (response: any) => {
+              fetch("/api/verify-google-token", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ credential: response.credential }),
+              })
+                .then((res) => res.json())
+                .then((data) => {
+                  if (data.allowed) {
+                    setIsAuthorized(true);
+                  } else {
+                    alert("Access denied.");
+                  }
+                });
+            },
+          });
+        }
+      };
+
+      // If the script is already loaded, render immediately
+      if (window.google?.accounts?.id) {
+        renderGoogleButton();
+      } else {
+        // Otherwise, wait for the script to load
+        const interval = setInterval(() => {
+          if (window.google?.accounts?.id) {
+            clearInterval(interval);
+            renderGoogleButton();
+          }
+        }, 100);
+        // Clean up interval on unmount
+        return () => clearInterval(interval);
+      }
     }
   }, [isAuthorized]);
 
@@ -216,27 +245,77 @@ const App: React.FC = () => {
               {data.map((artist, index) => (
                 <React.Fragment key={index}>
                   <tr
-                    className="cursor-pointer hover:bg-gray-100"
+                    className="cursor-pointer hover:bg-gray-100 transition"
                     onClick={() => setExpandedArtist(expandedArtist === artist.artist ? null : artist.artist)}
                   >
-                    <td className="px-4 py-2 font-medium">{artist.artist}</td>
+                    <td className="px-4 py-2 font-medium flex items-center gap-2">
+                      <span
+                        className={`inline-block transition-transform duration-300 ${
+                          expandedArtist === artist.artist ? "rotate-90" : ""
+                        }`}
+                      >
+                        ▶
+                      </span>
+                      {artist.artist}
+                    </td>
                     <td className="px-4 py-2 text-blue-600 underline">{artist.count}</td>
                     <td className="px-4 py-2">${(artist.count * 20).toLocaleString()}</td>
                   </tr>
                   {expandedArtist === artist.artist && (
-                    <tr className="bg-gray-50 transition-all duration-500 ease-in-out">
-                      <td colSpan={3} className="px-6 py-3">
-                        <div className="transition-all duration-500 ease-in-out overflow-hidden max-h-[500px]">
-                          <ul className="divide-y divide-gray-200">
-                            {Object.entries(artist.trackBreakdown).map(([title, count]) => (
-                              <li
-                                key={title}
-                                className="py-1 flex items-center justify-between text-sm text-gray-800"
-                              >
-                                <span className="truncate w-3/4">{title}</span>
-                                <span className="text-gray-500 w-1/4 text-right">{count} plays</span>
-                              </li>
-                            ))}
+                    <tr className="bg-gradient-to-r from-blue-50 to-purple-50 transition-all duration-500 ease-in-out">
+                      <td colSpan={3} className="px-6 py-4">
+                        <div className="overflow-hidden max-h-[500px]">
+                          <div className="mb-2 flex items-center gap-2">
+                            <span className="text-lg font-semibold text-purple-700">Breakdown</span>
+                            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                              {Object.keys(artist.trackBreakdown).length} tracks
+                            </span>
+                          </div>
+                          <ul className="divide-y divide-purple-100">
+                            {Object.entries(artist.trackBreakdown).map(([title, info]) => {
+                              const trackInfo = info as { count: number; channels: string[] };
+                              return (
+                                <li
+                                  key={title}
+                                  className="flex flex-col"
+                                >
+                                  <div className="flex justify-between items-center py-1 text-sm">
+                                    <span className="truncate text-gray-800 px-4">{title}</span>
+                                    <span
+                                      className="text-gray-500 px-4 cursor-pointer underline"
+                                      onClick={() =>
+                                        setExpandedTrack(
+                                          expandedTrack &&
+                                          expandedTrack.artist === artist.artist &&
+                                          expandedTrack.title === title
+                                            ? null
+                                            : { artist: artist.artist, title }
+                                        )
+                                      }
+                                      title="Show stations"
+                                    >
+                                      {trackInfo.count} play{trackInfo.count !== 1 ? "s" : ""}
+                                    </span>
+                                  </div>
+                                  {expandedTrack &&
+                                    expandedTrack.artist === artist.artist &&
+                                    expandedTrack.title === title && (
+                                      <div className="bg-white border border-purple-200 rounded shadow p-3 mt-2 ml-4 w-fit">
+                                        <div className="font-semibold text-purple-700 mb-1">Stations:</div>
+                                        {trackInfo.channels.length > 0 ? (
+                                          <ul className="list-disc list-inside text-gray-700">
+                                            {trackInfo.channels.map((channel) => (
+                                              <li key={channel}>{channel}</li>
+                                            ))}
+                                          </ul>
+                                        ) : (
+                                          <div className="text-gray-400">No station data</div>
+                                        )}
+                                      </div>
+                                    )}
+                                </li>
+                              );
+                            })}
                           </ul>
                         </div>
                       </td>

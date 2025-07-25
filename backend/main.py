@@ -9,8 +9,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from zoneinfo import ZoneInfo
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 
 app = FastAPI()
 
@@ -19,8 +20,6 @@ class CustomStaticFiles(StaticFiles):
         response = await super().get_response(path, scope)
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         return response
-
-from pathlib import Path
 
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -34,31 +33,21 @@ app.add_middleware(
 )
 
 # MongoDB connection
-# MongoDB connection
 import certifi
-
-# MongoDB connection
 MONGO_URI = os.getenv("MONGO_URI")
 client = MongoClient(MONGO_URI, tls=True, tlsAllowInvalidCertificates=False, tlsCAFile=certifi.where())
-
-
 try:
     client.admin.command("ping")
     print("✅ MongoDB connection successful")
 except Exception as e:
     print(f"❌ MongoDB connection failed: {e}")
 
-
 db = client["sirius"]
 collection = db["comedy_tracks"]
+tracked_artists_collection = db["tracked_artists"]
 
-BASE_DIR = Path(__file__).parent
-tracked_artists_path = BASE_DIR / "tracked_artists.json"
-
-# Load tracked artists and tracks
-with open(tracked_artists_path) as f:
-    TRACKED_ARTISTS_DATA = json.load(f)
-
+# Replace loading from JSON with loading from MongoDB
+TRACKED_ARTISTS_DATA = list(tracked_artists_collection.find({}, {"_id": 0, "artist": 1, "tracks": 1}))
 ARTISTS = [item["artist"] for item in TRACKED_ARTISTS_DATA]
 TRACKS = []
 for item in TRACKED_ARTISTS_DATA:
@@ -66,7 +55,7 @@ for item in TRACKED_ARTISTS_DATA:
 
 @app.get("/")
 async def read_root():
-    return FileResponse("/home/ec2-user/SiriusMonitoring/api/static/index.html")
+    return FileResponse("/home/ec2-user/sirius-artist-tracker/backend/static/index.html")
 
 @app.get("/api/artist-plays")
 async def artist_plays(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
@@ -79,7 +68,6 @@ async def artist_plays(start: Optional[str] = Query(None), end: Optional[str] = 
         start_dt = clean_iso(start) or datetime(2020, 1, 1)
         end_dt = clean_iso(end) or datetime.utcnow()
         print(f"Querying for artists: {ARTISTS}, tracks: {TRACKS}, start: {start_dt}, end: {end_dt}")
-
         pipeline = [
             {
                 "$match": {
@@ -117,11 +105,9 @@ async def artist_plays(start: Optional[str] = Query(None), end: Optional[str] = 
                 }
             }
         ]
-
         results = list(collection.aggregate(pipeline, collation={"locale": "en", "strength": 2}))
         print(f"Query results: {results}")
         return {"data": results}
-
     except ValueError as e:
         print(f"ValueError: {str(e)}")
         return {"error": f"Invalid date format: {str(e)}"}
@@ -142,17 +128,33 @@ async def get_date_range(period: str):
         start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
     else:
         start = datetime(2020, 1, 1, tzinfo=ZoneInfo("America/Toronto"))
-
     start = start - timedelta(hours=4)
     return {"start": start.isoformat(), "end": now.isoformat()}
 
 from pydantic import BaseModel
 import requests
 
-GOOGLE_CLIENT_ID = "182239299318-an3tmsdprif9pf0bg77ulmfgofkg435h.apps.googleusercontent.com"
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 
 class TokenRequest(BaseModel):
     credential: str
+
+@app.post("/verify-google-token")
+async def verify_token(data: TokenRequest):
+    try:
+        resp = requests.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={data.credential}")
+        if resp.status_code != 200:
+            return JSONResponse(content={"allowed": False, "error": "Invalid token"}, status_code=401)
+        payload = resp.json()
+        email = payload.get("email")
+        aud = payload.get("aud")
+        allowed_emails = set(e.strip() for e in os.getenv("ALLOWED_EMAILS", "").split(",") if e.strip())
+        if aud == GOOGLE_CLIENT_ID and email in allowed_emails:
+            return {"allowed": True}
+        else:
+            return {"allowed": False}
+    except Exception as e:
+        return JSONResponse(content={"allowed": False, "error": str(e)}, status_code=500)
 
 @app.post("/api/verify-google-token")
 async def verify_token(data: TokenRequest):
@@ -160,15 +162,13 @@ async def verify_token(data: TokenRequest):
         resp = requests.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={data.credential}")
         if resp.status_code != 200:
             return JSONResponse(content={"allowed": False, "error": "Invalid token"}, status_code=401)
-
         payload = resp.json()
-        if (
-            payload.get("aud") == GOOGLE_CLIENT_ID and
-            payload.get("email") == "info@setupcomedy.com"
-        ):
+        email = payload.get("email")
+        aud = payload.get("aud")
+        allowed_emails = set(e.strip() for e in os.getenv("ALLOWED_EMAILS", "").split(",") if e.strip())
+        if aud == GOOGLE_CLIENT_ID and email in allowed_emails:
             return {"allowed": True}
         else:
             return {"allowed": False}
     except Exception as e:
         return JSONResponse(content={"allowed": False, "error": str(e)}, status_code=500)
-
