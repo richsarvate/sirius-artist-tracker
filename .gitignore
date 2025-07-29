@@ -12,12 +12,14 @@ node_modules/
 dist/
 build/
 .env
+venv/*
 
 # Mac/Linux
 .DS_Store
 
 # Logs
 *.log
+*/log.txt
 
 # Backup
 *.bak

@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 import time
 
 # Load environment variables
-load_dotenv(dotenv_path="../.env", override=True)
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(

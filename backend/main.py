@@ -61,12 +61,15 @@ async def read_root():
 async def artist_plays(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
     def clean_iso(date_str: Optional[str]) -> Optional[datetime]:
         if date_str:
-            return datetime.fromisoformat(date_str.rstrip("Z"))
+            # Parse and convert to Eastern Time (EDT/EST)
+            dt = datetime.fromisoformat(date_str.rstrip("Z"))
+            return dt.astimezone(ZoneInfo("America/New_York"))
         return None
 
     try:
-        start_dt = clean_iso(start) or datetime(2020, 1, 1)
-        end_dt = clean_iso(end) or datetime.utcnow()
+        # Use Eastern Time for start and end
+        start_dt = clean_iso(start) or datetime(2020, 1, 1, tzinfo=ZoneInfo("America/New_York"))
+        end_dt = clean_iso(end) or datetime.now(ZoneInfo("America/New_York"))
         print(f"Querying for artists: {ARTISTS}, tracks: {TRACKS}, start: {start_dt}, end: {end_dt}")
         pipeline = [
             {
@@ -82,7 +85,8 @@ async def artist_plays(start: Optional[str] = Query(None), end: Optional[str] = 
                     "tracks": {
                         "$push": {
                             "title": "$title",
-                            "channel": "$channel"
+                            "channel": "$channel",
+                            "timestamp": "$timestamp"
                         }
                     },
                     "count": {"$sum": 1}
