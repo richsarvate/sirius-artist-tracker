@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "esbuild src/main.tsx --bundle --platform=browser --outfile=dist/main.js --jsx=automatic && cp index.html dist/index.html"
+    "build": "esbuild src/main.tsx --bundle --platform=browser --outfile=dist/main.js --jsx=automatic && sed 's|/src/main.tsx|/main.js|g' index.html > dist/index.html"
   },
   "keywords": [],
   "author": "",

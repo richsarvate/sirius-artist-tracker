@@ -1,0 +1,2 @@
+Error loading Google Sheets credentials: GOOGLE_SHEETS_JSON_BASE64 not found in environment.
+Error loading Google Sheets credentials: GOOGLE_SHEETS_JSON_BASE64 not found in environment.

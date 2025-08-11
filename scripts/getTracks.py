@@ -8,6 +8,8 @@ import sys
 import os
 from dotenv import load_dotenv
 import time
+import asyncio
+import aiohttp
 
 # Load environment variables
 load_dotenv()
@@ -72,6 +74,26 @@ for attempt in range(max_retries):
 
 BASE_URL = os.getenv("XMPLAYLIST_BASE_URL", "https://xmplaylist.com/api/station/")
 
+async def check_first_plays(new_tracks):
+    """Send new tracks to the API for first-play checking"""
+    if not new_tracks:
+        return
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "http://localhost:8000/api/ingest-plays",
+                json=new_tracks,
+                timeout=aiohttp.ClientTimeout(total=30)
+            ) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    logger.info(f"First-play check completed: {result}")
+                else:
+                    logger.error(f"First-play check failed: {response.status}")
+    except Exception as e:
+        logger.error(f"Error checking first plays: {e}")
+
 def fetch_and_store():
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
@@ -84,6 +106,8 @@ def fetch_and_store():
     station_docs = list(stations_collection.find({}, {"_id": 0, "name": 1}))
     STATION_NAMES = [doc["name"] for doc in station_docs]
     logger.info(f"Loaded {len(STATION_NAMES)} stations from MongoDB: {STATION_NAMES}")
+
+    all_new_tracks = []  # Collect all new tracks for first-play checking
 
     for station in STATION_NAMES:
         logger.info(f"Processing station: {station}")
@@ -116,6 +140,8 @@ def fetch_and_store():
                     )
                     if result.upserted_id:
                         tracks_added += 1
+                        # Add to new tracks list for first-play checking
+                        all_new_tracks.append(track_info)
 
                 except KeyError as e:
                     logger.error(f"[{channel_name}] KeyError processing track item: {e}")
@@ -148,6 +174,11 @@ def fetch_and_store():
             logger.error(f"[{station}] Unexpected error: {e}")
             continue
 
+    # Check for first plays after processing all stations
+    if all_new_tracks:
+        logger.info(f"Checking {len(all_new_tracks)} new tracks for first plays")
+        asyncio.run(check_first_plays(all_new_tracks))
+    
     logger.info("Finished processing all stations")
 
 if __name__ == "__main__":

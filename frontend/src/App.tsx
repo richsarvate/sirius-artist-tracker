@@ -221,7 +221,7 @@ const App: React.FC = () => {
     }
   }, [period, isAuthorized]);
 
-  // Replace your Google sign-in useEffect with this:
+  // Replace your existing Google sign-in useEffect with this improved version:
   useEffect(() => {
     // Only run if not authorized
     if (!isAuthorized) {
@@ -231,47 +231,79 @@ const App: React.FC = () => {
           const buttonContainer = document.getElementById("gsi-button");
           if (buttonContainer) {
             buttonContainer.innerHTML = "";
+            window.google.accounts.id.initialize({
+              client_id: "182239299318-an3tmsdprif9pf0bg77ulmfgofkg435h.apps.googleusercontent.com",
+              callback: (response: any) => {
+                fetch("/api/verify-google-token", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ credential: response.credential }),
+                })
+                  .then((res) => res.json())
+                  .then((data) => {
+                    if (data.allowed) {
+                      setIsAuthorized(true);
+                    } else {
+                      alert("Access denied.");
+                    }
+                  });
+              },
+            });
+            
             window.google.accounts.id.renderButton(buttonContainer, {
               theme: "outline",
               size: "large",
               width: 300,
             });
           }
-          window.google.accounts.id.initialize({
-            client_id: "182239299318-an3tmsdprif9pf0bg77ulmfgofkg435h.apps.googleusercontent.com",
-            callback: (response: any) => {
-              fetch("/api/verify-google-token", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ credential: response.credential }),
-              })
-                .then((res) => res.json())
-                .then((data) => {
-                  if (data.allowed) {
-                    setIsAuthorized(true);
-                  } else {
-                    alert("Access denied.");
-                  }
-                });
-            },
-          });
         }
       };
 
-      // If the script is already loaded, render immediately
-      if (window.google?.accounts?.id) {
-        renderGoogleButton();
-      } else {
-        // Otherwise, wait for the script to load
-        const interval = setInterval(() => {
+      // Load the Google Identity Services script if not already loaded
+      const loadGoogleScript = () => {
+        return new Promise((resolve) => {
+          // Check if script is already loaded
           if (window.google?.accounts?.id) {
-            clearInterval(interval);
-            renderGoogleButton();
+            resolve(true);
+            return;
           }
-        }, 100);
-        // Clean up interval on unmount
-        return () => clearInterval(interval);
-      }
+
+          // Check if script tag already exists
+          const existingScript = document.querySelector('script[src*="accounts.google.com"]');
+          if (existingScript) {
+            // Script exists but may not be loaded yet, wait for it
+            const checkLoaded = setInterval(() => {
+              if (window.google?.accounts?.id) {
+                clearInterval(checkLoaded);
+                resolve(true);
+              }
+            }, 100);
+            return;
+          }
+
+          // Create and load the script
+          const script = document.createElement('script');
+          script.src = 'https://accounts.google.com/gsi/client';
+          script.async = true;
+          script.defer = true;
+          script.onload = () => {
+            // Wait a bit for the library to initialize
+            setTimeout(() => {
+              resolve(true);
+            }, 100);
+          };
+          script.onerror = () => {
+            console.error('Failed to load Google Identity Services script');
+            resolve(false);
+          };
+          document.head.appendChild(script);
+        });
+      };
+
+      // Load script and render button
+      loadGoogleScript().then(() => {
+        renderGoogleButton();
+      });
     }
   }, [isAuthorized]);
 
