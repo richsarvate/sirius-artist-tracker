@@ -104,6 +104,50 @@ const App: React.FC = () => {
   const [search, setSearch] = useState<string>("");
   const [previousRoyalties, setPreviousRoyalties] = useState<number | null>(null);
 
+  // Check for stored authentication on app load
+  const checkStoredAuth = () => {
+    try {
+      const storedAuth = localStorage.getItem('artistTracker_auth');
+      if (storedAuth) {
+        const authData = JSON.parse(storedAuth);
+        const now = new Date();
+        const expiry = new Date(authData.expires);
+        
+        if (now < expiry) {
+          // Token is still valid
+          setIsAuthorized(true);
+          return true;
+        } else {
+          // Token expired, remove it
+          localStorage.removeItem('artistTracker_auth');
+        }
+      }
+    } catch (error) {
+      // Invalid stored data, remove it
+      localStorage.removeItem('artistTracker_auth');
+    }
+    return false;
+  };
+
+  // Store successful authentication for 7 days
+  const storeAuth = (credential: string) => {
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + 7); // 7 days from now
+    
+    const authData = {
+      credential,
+      expires: expiryDate.toISOString()
+    };
+    
+    localStorage.setItem('artistTracker_auth', JSON.stringify(authData));
+  };
+
+  // Clear stored authentication
+  const clearAuth = () => {
+    localStorage.removeItem('artistTracker_auth');
+    setIsAuthorized(false);
+  };
+
   const getDateRange = (period: string) => {
     console.log('getDateRange period:', period);
     const now = new Date();
@@ -221,6 +265,11 @@ const App: React.FC = () => {
     }
   }, [period, isAuthorized]);
 
+  // Check for stored authentication on component mount
+  useEffect(() => {
+    checkStoredAuth();
+  }, []);
+
   // Replace your existing Google sign-in useEffect with this improved version:
   useEffect(() => {
     // Only run if not authorized
@@ -242,10 +291,16 @@ const App: React.FC = () => {
                   .then((res) => res.json())
                   .then((data) => {
                     if (data.allowed) {
+                      // Store authentication for 7 days
+                      storeAuth(response.credential);
                       setIsAuthorized(true);
                     } else {
                       alert("Access denied.");
                     }
+                  })
+                  .catch((error) => {
+                    console.error('Authentication error:', error);
+                    alert("Authentication failed. Please try again.");
                   });
               },
             });
@@ -327,7 +382,7 @@ const App: React.FC = () => {
   }
 
   const handleLogout = () => {
-    setIsAuthorized(false);
+    clearAuth();
     window.google.accounts.id.disableAutoSelect();
   };
 
