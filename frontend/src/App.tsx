@@ -93,10 +93,22 @@ const getPreviousDateRange = (period: string) => {
   }
 };
 
+const getCustomPreviousDateRange = (start: string, end: string) => {
+  if (!start || !end) return null;
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const durationMs = endDate.getTime() - startDate.getTime();
+  const prevEnd = new Date(startDate.getTime());
+  const prevStart = new Date(startDate.getTime() - durationMs);
+  return { start: prevStart.toISOString(), end: prevEnd.toISOString() };
+};
+
 const App: React.FC = () => {
   const [data, setData] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<string>('month');
+  const [period, setPeriod] = useState<string>('today');
+  const [customStart, setCustomStart] = useState<string>('');
+  const [customEnd, setCustomEnd] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
   const [expandedArtist, setExpandedArtist] = useState<string | null>(null);
@@ -204,7 +216,17 @@ const App: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const { start, end } = getDateRange(period);
+      let start: string, end: string;
+      if (period === 'custom') {
+        if (!customStart || !customEnd) {
+          setLoading(false);
+          return;
+        }
+        start = new Date(customStart).toISOString();
+        end = new Date(customEnd).toISOString();
+      } else {
+        ({ start, end } = getDateRange(period));
+      }
       const params = new URLSearchParams({ start, end });
       const response = await fetch(`/api/artist-plays?${params}`);
       const result = await response.json();
@@ -263,7 +285,7 @@ const App: React.FC = () => {
     if (isAuthorized) {
       fetchData();
     }
-  }, [period, isAuthorized]);
+  }, [period, customStart, customEnd, isAuthorized]);
 
   // Check for stored authentication on component mount
   useEffect(() => {
@@ -388,7 +410,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // Fetch previous period royalties
-    const prevRange = getPreviousDateRange(period);
+    const prevRange = period === 'custom'
+      ? getCustomPreviousDateRange(customStart, customEnd)
+      : getPreviousDateRange(period);
     if (!prevRange) {
       setPreviousRoyalties(null);
       return;
@@ -411,7 +435,7 @@ const App: React.FC = () => {
       }
     };
     fetchPrev();
-  }, [period, search]);
+  }, [period, customStart, customEnd, search]);
 
   if (!isAuthorized) {
     return (
@@ -457,6 +481,7 @@ const App: React.FC = () => {
             <option value="year">This Year</option>
             <option value="last-year">Last Year</option>
             <option value="all">All Time</option>
+            <option value="custom">Custom</option>
           </select>
           {percentChange && (
             <span
@@ -474,6 +499,25 @@ const App: React.FC = () => {
             </span>
           )}
         </div>
+        {period === 'custom' && (
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              className="p-2 border rounded-md"
+              value={customStart}
+              onChange={(e) => setCustomStart(e.target.value)}
+              disabled={loading}
+            />
+            <span className="text-gray-500">→</span>
+            <input
+              type="date"
+              className="p-2 border rounded-md"
+              value={customEnd}
+              onChange={(e) => setCustomEnd(e.target.value)}
+              disabled={loading}
+            />
+          </div>
+        )}
       </div>
       <div className="grid grid-cols-3 gap-0 mb-2 text-white font-semibold bg-gradient-to-r from-blue-500 to-purple-600 p-2 rounded-t-lg">
         <div className="text-center">Total Artists: {totalArtists}</div>
