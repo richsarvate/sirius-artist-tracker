@@ -6,8 +6,9 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 from pymongo import MongoClient
+from pathlib import Path
 
-load_dotenv(dotenv_path="../.env", override=True)
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env", override=True)
 
 isrc_sheet = os.getenv("GOOGLE_SHEETS_ISRC_NAME")
 mongo_url = os.getenv("MONGO_URI")

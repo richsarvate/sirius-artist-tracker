@@ -197,7 +197,7 @@ def send_first_play_email_sync(artist: str, title: str, channel: str):
         msg = EmailMessage()
         msg["From"] = SMTP_USER
         msg["To"] = FIRST_PLAY_EMAIL_RECIPIENT
-        msg["Subject"] = "New Track Played on Sirius!"
+        msg["Subject"] = f"New Track Played on Sirius! {artist} - {title}"
         
         # Email body
         body = f"""{title} by {artist} just played for the first time on {channel}.
@@ -268,9 +268,10 @@ async def process_new_plays(plays_data):
     # ... (your existing code to save plays to main collection)
 
 @app.post("/api/ingest-plays")
-async def ingest_plays(plays: list):
+async def ingest_plays(request: Request):
     """Endpoint to receive new play data"""
     try:
+        plays = await request.json()
         await process_new_plays(plays)
         return {"status": "success", "processed": len(plays)}
     except Exception as e:
